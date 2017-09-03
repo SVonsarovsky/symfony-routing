@@ -2,11 +2,10 @@
 
 namespace RoutingBundle\Controller;
 
+use ReflectionClass;
 use RoutingBundle\Routing\CustomLoader;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class CustomController extends Controller
 {
@@ -15,7 +14,7 @@ class CustomController extends Controller
     protected $controller;
     protected $action;
 
-    public function forwardAction(string $path, Request $request): Response
+    public function forwardAction(string $path): Response
     {
         $this->processPath($path);
 
@@ -26,7 +25,7 @@ class CustomController extends Controller
     {
         $controller = $this->getForwardController();
         if ($controller == CustomLoader::CONTROLLER) {
-            throw new NotFoundHttpException();
+            throw $this->createNotFoundException();
         }
 
         return $this->forward($controller, [
@@ -39,7 +38,7 @@ class CustomController extends Controller
         $this->path = strtolower(preg_replace("/[\/]+$/", '', $path));
         $pathSegments = explode('/', $this->path);
         if (count($pathSegments) != 3) {
-            throw new NotFoundHttpException();
+            throw $this->createNotFoundException();
         }
 
         $this->bundle = ucfirst($pathSegments[0]);
@@ -47,13 +46,16 @@ class CustomController extends Controller
         $this->action = $pathSegments[2];
     }
 
-    protected function getForwardController()
+    protected function getForwardController(): string
     {
         $class = "{$this->bundle}Bundle\\Controller\\{$this->controller}Controller";
-        if (!(class_exists($class) && method_exists(new $class, "{$this->action}Action"))) {
-            throw new NotFoundHttpException();
+        if (class_exists($class)) {
+            $reflector = new ReflectionClass($class);
+            if (!$reflector->isAbstract() && $reflector->hasMethod("{$this->action}Action")) {
+                return "{$this->bundle}Bundle:{$this->controller}:{$this->action}";
+            }
         }
 
-        return "{$this->bundle}Bundle:{$this->controller}:{$this->action}";
+        throw $this->createNotFoundException();
     }
 }
